@@ -9,37 +9,39 @@ script_path = os.path.dirname(__file__)
 export_path = script_path
 # incomplete list of tomboy tags found in some notes, to be replaced by corresponding html (any attribute in those tags is ignored)
 replace_tags = {
-	'datetime' : ('<span style="color: grey; font-size: small">', '</span>'),
-	'size:small' : ('<span style="font-size: small">', '</span>'),
-	'bold' : ('<span style="font-weight: bold">', '</span>'),
-	'highlight' : ('<span style="background-color: yellow">', '</span>'),
-	'list' : ('<ul>', '</ul>'),
-	'list-item' : ('<li>', '</li>')}
+	'datetime': ('<span style="color: grey; font-size: small">', '</span>'),
+	'size:small': ('<span style="font-size: small">', '</span>'),
+	'bold': ('<span style="font-weight: bold">', '</span>'),
+	'highlight': ('<span style="background-color: yellow">', '</span>'),
+	'list': ('<ul>', '</ul>'),
+	'list-item': ('<li>', '</li>'),
+}
 # </parameters>
 
 def recurse_read_nodes(node):
 	ret = ''
 	for n in node.childNodes:
 		if n.nodeType == minidom.Document.TEXT_NODE:
-			ret = ret + n.data
+			ret += n.data
 		elif n.nodeType == minidom.Document.ELEMENT_NODE:
 			if replace_tags.has_key(n.tagName):
-				ret = ret + replace_tags[n.tagName][0]
-				ret = ret + recurse_read_nodes(n)
-				ret = ret + replace_tags[n.tagName][1]
-			elif n.tagName in ('link:url', 'link:internal', 'link:broken'):
+				ret += (replace_tags[n.tagName][0]
+					+ recurse_read_nodes(n)
+					+ replace_tags[n.tagName][1])
+			elif 'link:' in n.tagName:
+				# tags link:url, link:internal or link:broken
 				try:
 					link_name = n.childNodes[0].data
 				except (IndexError, AttributeError):
 					link_name = "*** TOMBOY EXPORT ERROR: can't read link ***"
-				link_url = ''
 				if n.tagName == 'link:internal':
-					link_url = notes[link_name.upper()][0] + '.html#' + link_name
+					link_url = notes[link_name.upper()][0] + '.html' if notebook_name != notes[link_name.upper()][0] else ''
+					link_url += '#' + link_name
 				elif n.tagName == 'link:broken':
 					link_url = '#' + link_name
 				else:
 					link_url = link_name
-				ret = ret + '<a href="' + link_url + '">' + link_name + '</a>'
+				ret += '<a href="' + link_url + '">' + link_name + '</a>'
 	return ret
 
 # dictionary containing the final html for every notebook
@@ -58,20 +60,20 @@ for fpath in file_paths:
 		xmldoc = minidom.parse(os.path.join(dirpath, fpath))
 	except IOError:
 		sys.stderr.writelines("can't read file " + fpath)
-		break
+		continue
 	notebook_name = 'Notes'
 	for n in xmldoc.getElementsByTagName('tag'):
 		try:
 			if n.childNodes[0].data.startswith('system:notebook:'):
 				notebook_name = n.childNodes[0].data[16:]
-		except:
+		except AttributeError:
 			pass
 	if not notebooks.has_key(notebook_name):
 		notebooks[notebook_name] = ['', '']
 	note_title = "*** TOMBOY EXPORT ERROR: can't find note title ***"
 	try:
 		note_title = xmldoc.getElementsByTagName('title')[0].childNodes[0].data
-	except:
+	except AttributeError:
 		pass
 	# the goal is to be able to find the note's title from its file name and vice versa, and also the notebook's name
 	# (there must be a better way to do this)
@@ -89,13 +91,13 @@ for fpath in file_paths:
 		continue
 	note_content_node = xmldoc.getElementsByTagName('note-content')[0]
 	note_content_text = recurse_read_nodes(note_content_node)
-	notebooks[notebook_name][0] += '<a href="#' + note_title + '">' + note_title + '</a><br>\n'
+	notebooks[notebook_name][0] += '<a href="#' + note_title + '">' + note_title + '</a>\n'
 	notebooks[notebook_name][1] += '<a name="' + note_title + '">&nbsp;</a><hr /><!--' + fpath + '--><a href="#TomBoyExportNoteList" style="font-size: 50%; vertical-align: super">^(up)</a><br>' + note_content_text
 # write final .html files
 for k in notebooks:
-	f = io.open(os.path.join(export_path, k + '.html'), 'w')
-	f.write('<html><body><a name="TomBoyExportNoteList">&nbsp;</a><hr />' + notebooks[k][0] + '<pre>' + notebooks[k][1] + '</pre></body></html>')
-	f.close()
+	with io.open(os.path.join(export_path, k + '.html'), 'w') as f:
+		f.write('<html><body style="font-family: monospace; white-space: pre-wrap"><a name="TomBoyExportNoteList">&nbsp;</a><hr />' + notebooks[k][0] + notebooks[k][1] + '</body></html>')
+		f.close()
 
 # TomBoy tag list as seen in a few notes in version 1.8.3
 # note
